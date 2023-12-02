@@ -102,16 +102,10 @@ func (hanlder *UserHandler) HandleGetUsers(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		hanlder.logger.Fatalf(err.Error())
 	}
-	res, err := json.Marshal(users)
 
-	if err != nil {
-		hanlder.logger.Fatalf("Failed to encode Json: %+v", err.Error())
-	}
-
-
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(res)
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(users)
 }
 
 
