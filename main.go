@@ -27,7 +27,8 @@ type User struct {
 }
 
 type UserStore interface {
-	GetAllUsers() []User
+	InsertNewUser() (map[string]string, error)
+	GetAllUsers() ([]User, error)
 }
 
 type UsersSqlStore struct {
@@ -36,7 +37,6 @@ type UsersSqlStore struct {
 }
 
 func NewSqlStore(db *sql.DB) *UsersSqlStore {
-
 	pingErr := db.Ping()
 
 	if pingErr != nil {
@@ -52,13 +52,16 @@ func NewSqlStore(db *sql.DB) *UsersSqlStore {
 	}
 }
 
-func GetUsersFromStore(logger *log.Logger, db *sql.DB) ([]User, error) {
+
+
+
+func (store *UsersSqlStore) GetAllUsers() ([]User, error) {
 	var users []User
 
-	rows, err := db.Query("select * from user")
+	rows, err := store.db.Query("select * from user")
 
 	if err != nil {
-		logger.Fatalf("Failed to get users from db, error is: %+v", err)
+		log.Fatalf("Failed to get users from db, error is: %+v", err)
 		return nil, err
 	}
 
@@ -75,54 +78,66 @@ func GetUsersFromStore(logger *log.Logger, db *sql.DB) ([]User, error) {
 
 
 	return users, nil
+}
+
+type UserHandler struct {
+	store UsersSqlStore
+	logger *log.Logger
+}
+
+func NewUserHandler(db  *sql.DB, logger *log.Logger) *UserHandler {
+	myDatabase := NewSqlStore(db)
+
+	return &UserHandler{
+		store: *myDatabase,
+		logger: logger,
+	}
 
 }
 
+func (hanlder *UserHandler) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
+	users, err := hanlder.store.GetAllUsers()
+
+	if err != nil {
+		hanlder.logger.Fatalf(err.Error())
+	}
+	res, err := json.Marshal(users)
+
+	if err != nil {
+		hanlder.logger.Fatalf("Failed to encode Json: %+v", err.Error())
+	}
+
+
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(res)
+}
+
+
+func (handler *UserHandler) HandleHome(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte("Hello my friend\n"))
+}
+
+
 func main() {
 	logger := log.Default()
-
 	db, err := sql.Open("sqlite3", file)
-	myDatabase := NewSqlStore(db)
+	// ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+
+	userHandler := NewUserHandler(db, logger)
+
 
 	mux := http.NewServeMux()
 
-
-	mux.HandleFunc("/users", func(w http.ResponseWriter, r *http.Request) {
-
-		users, err := GetUsersFromStore(logger, myDatabase.db)
-
-		if err != nil {
-			logger.Fatalf(err.Error())
-		}
-
-		res, err := json.Marshal(users)
-
-		w.WriteHeader(200)
-		w.Header().Add("Content-Type", "application/json")
-		w.Write(res)
-	})
-
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("Hello my friend\n"))
-	})
+	mux.HandleFunc("/", userHandler.HandleHome)
+	mux.HandleFunc("/users", userHandler.HandleGetUsers)
 
 	err = http.ListenAndServe(fmt.Sprintf(":%s", PORT), mux)
 
 	logger.Printf("Server is Listening on port %s", fmt.Sprintf(":%s", PORT))
-
 	if err != nil {
 		logger.Fatalf("Failed to run the server and listen on port %+v: error is %+v", PORT, err)
 		os.Exit(1)
 	}
 }
 
-// ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
-// defer cancel()
-
-// conn, err := myDatabase.db.Conn(ctx)
-// defer conn.Close()
-
-// if err != nil {
-// 	logger.Fatalf("Failed to connnect to database, error is: %+v", err)
-// 	os.Exit(1)
-// }
