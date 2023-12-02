@@ -9,6 +9,7 @@ import (
 	"os"
 
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/julienschmidt/httprouter"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -95,7 +96,7 @@ func NewUserHandler(db  *sql.DB, logger *log.Logger) *UserHandler {
 
 }
 
-func (hanlder *UserHandler) HandleGetUsers(w http.ResponseWriter, r *http.Request) {
+func (hanlder *UserHandler) HandleGetUsers(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	users, err := hanlder.store.GetAllUsers()
 
 	if err != nil {
@@ -114,7 +115,7 @@ func (hanlder *UserHandler) HandleGetUsers(w http.ResponseWriter, r *http.Reques
 }
 
 
-func (handler *UserHandler) HandleHome(w http.ResponseWriter, r *http.Request) {
+func (handler *UserHandler) HandleHome(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
 	w.Write([]byte("Hello my friend\n"))
 }
 
@@ -124,20 +125,17 @@ func main() {
 	db, err := sql.Open("sqlite3", file)
 	// ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 
+	if err != nil {
+		logger.Fatalf("Error opening the database", err)
+	}
+
 	userHandler := NewUserHandler(db, logger)
 
+	router := httprouter.New()
 
-	mux := http.NewServeMux()
+	router.GET("/", userHandler.HandleHome)
+    router.GET("/users", userHandler.HandleGetUsers)
 
-	mux.HandleFunc("/", userHandler.HandleHome)
-	mux.HandleFunc("/users", userHandler.HandleGetUsers)
-
-	err = http.ListenAndServe(fmt.Sprintf(":%s", PORT), mux)
-
-	logger.Printf("Server is Listening on port %s", fmt.Sprintf(":%s", PORT))
-	if err != nil {
-		logger.Fatalf("Failed to run the server and listen on port %+v: error is %+v", PORT, err)
-		os.Exit(1)
-	}
+    logger.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", PORT), router))
 }
 
